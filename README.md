@@ -56,3 +56,5 @@ query: "SELECT * FROM recorder WHERE rid = 1"
 ## license
 
 GNU GPL version 3.0
+
+see `LICENSE` file.

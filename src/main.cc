@@ -22,7 +22,9 @@
 #include "bindings_caller.hpp"
 
 int main(const int argc, const char* const* const argv) {
-  argparse::ArgumentParser parser("throughput-recorder");
+  argparse::ArgumentParser parser(
+      "recorder", "database throughput and latency recording system",
+      "published under GNU General Public License 3.0");
   parser.addArgument({"config"}, "configuration file path");
   parser.addArgument({"--verbose"}, "print verbose log",
                      argparse::ArgumentType::StoreTrue);
