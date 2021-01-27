@@ -53,7 +53,7 @@ struct Statistic {
                 "time_point must be trivially copyable");
 
   int thread_number;
-  time_point end;
+  time_point begin, end;
 };
 
 template <class DatabaseBindingT, class ClockT>
@@ -67,9 +67,10 @@ void Worker(const Configurations& conf, StartingPistol& starting_pistol,
 
   try {
     while (likely(is_running.load(std::memory_order::memory_order_acquire))) {
+      const auto begin = ClockT::now();
       binding.execute(query);
       const auto end = ClockT::now();
-      const Statistic<ClockT> s = {thread_number, end};
+      const Statistic<ClockT> s = {thread_number, begin, end};
       statistics_queue.push(s);
     }
   } catch (const std::runtime_error& e) {
@@ -84,9 +85,12 @@ Statistics StatisticsWorker(
     std::atomic<bool>& is_running, const int thread_count, const bool verbose) {
   using namespace std::chrono_literals;
 
-  std::vector<std::tuple<int, typename ClockT::time_point>> statistics(
-      thread_count + 1);
-  std::vector<std::vector<double>> results(thread_count + 1);
+  std::vector<
+      std::tuple<int, std::chrono::microseconds, typename ClockT::time_point>>
+      statistics(thread_count + 1);
+  std::vector<
+      std::vector<std::tuple<Statistics::Throughput, Statistics::Latency>>>
+      results(thread_count + 1);
 
   static constexpr auto kInterval = 1s;
   const auto whole_index = thread_count;
@@ -94,8 +98,10 @@ Statistics StatisticsWorker(
   const auto update_statistics = [&results, &statistics, whole_index, verbose](
                                      const int index,
                                      const Statistic<ClockT> s) {
-    auto& [counter, deadline] = statistics[index];
+    auto& [counter, elapsed, deadline] = statistics[index];
     counter++;
+    elapsed +=
+        std::chrono::duration_cast<std::chrono::microseconds>(s.end - s.begin);
     if (deadline <= s.end) {
       const auto start_point = deadline - kInterval;
       const auto duration_ms =
@@ -104,16 +110,21 @@ Statistics StatisticsWorker(
               .count();
       const auto duration_s = duration_ms / 1000.0;
       const auto throughput = counter / duration_s;
-      results[index].emplace_back(throughput);
+      const auto latency = Statistics::Latency(elapsed / counter);
+      results[index].emplace_back(
+          std::make_tuple(Statistics::Throughput(throughput), latency));
       deadline = s.end + kInterval;
+
       counter = 0;
+      elapsed = std::chrono::microseconds(0);
       if (verbose) {
         if (index == whole_index) {
           std::cout << "whole: ";
         } else {
           std::cout << "thread" << index << ": ";
         }
-        std::cout << std::fixed << std::setprecision(2) << throughput << " ops"
+        std::cout << std::fixed << std::setprecision(2) << throughput
+                  << " ops, " << latency.latency().count() << " us"
                   << std::endl;
       }
     }
@@ -131,16 +142,10 @@ Statistics StatisticsWorker(
     update_statistics(s.thread_number, s);
     update_statistics(whole_index, s);
   }
-  const auto whole_result =
-      Statistics::Throughput::FromThroughputVector(results.back());
+  const auto whole_result = results.back();
   results.pop_back();
-  std::vector<std::vector<Statistics::Throughput>> thread_result(
-      results.size());
-  std::transform(std::begin(results), std::end(results),
-                 std::begin(thread_result),
-                 Statistics::Throughput::FromThroughputVector);
 
-  return Statistics(whole_result, thread_result);
+  return Statistics(whole_result, results);
 }
 
 }  // namespace execution

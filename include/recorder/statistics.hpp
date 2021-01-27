@@ -39,24 +39,34 @@ class Statistics {
 
    public:
     [[nodiscard]] double throughput() const noexcept { return throughput_; }
+  };
+
+  class Latency {
+   private:
+    std::chrono::microseconds latency_;
 
    public:
-    static std::vector<Throughput> FromThroughputVector(
-        const std::vector<double>& tv) {
-      std::vector<Throughput> vt(tv.size());
-      std::transform(std::begin(tv), std::end(tv), std::begin(vt),
-                     [](double t) { return Throughput(t); });
-      return vt;
+    Latency() = default;
+    explicit Latency(std::chrono::microseconds latency) : latency_(latency) {}
+    Latency(const Latency&) = default;
+    Latency(Latency&&) = default;
+
+    Latency& operator=(const Latency&) = default;
+    Latency& operator=(Latency&&) = default;
+
+   public:
+    [[nodiscard]] std::chrono::microseconds latency() const noexcept {
+      return latency_;
     }
   };
 
  private:
-  std::vector<Throughput> whole_throughput_;
-  std::vector<std::vector<Throughput>> thread_throughput_;
+  std::vector<std::tuple<Throughput, Latency>> whole_throughput_;
+  std::vector<std::vector<std::tuple<Throughput, Latency>>> thread_throughput_;
 
  public:
-  Statistics(std::vector<Throughput> whole,
-             std::vector<std::vector<Throughput>> thread)
+  Statistics(std::vector<std::tuple<Throughput, Latency>> whole,
+             std::vector<std::vector<std::tuple<Throughput, Latency>>> thread)
       : whole_throughput_(std::move(whole)),
         thread_throughput_(std::move(thread)) {}
 
@@ -64,19 +74,24 @@ class Statistics {
   void dumpToStreamAsCsv(std::ostream& os) const {
     os << "time(sec),whole(ops)";
     for (std::size_t t = 0; t < thread_throughput_.size(); ++t) {
-      os << ",thread" << t << "(ops)";
+      os << ",thread" << t << "(ops),thread" << t << "(us)";
     }
     os << std::endl;
 
-    const auto dump_impl = [](std::ostream& os,
-                              const std::vector<Throughput>& t, std::size_t i) {
-      os << ",";
-      if (i >= t.size()) {
-        return false;
-      }
-      os << std::fixed << std::setprecision(2) << t[i].throughput();
-      return true;
-    };
+    const auto dump_impl =
+        [](std::ostream& os,
+           const std::vector<std::tuple<Throughput, Latency>>& t,
+           std::size_t i) {
+          os << ",";
+          if (i >= t.size()) {
+            os << ",";
+            return false;
+          }
+          const auto& [tp, lt] = t[i];
+          os << std::fixed << std::setprecision(2) << tp.throughput() << ","
+             << lt.latency().count();
+          return true;
+        };
 
     for (std::size_t i = 1;; ++i) {
       std::stringstream ss;
