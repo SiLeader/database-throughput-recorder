@@ -1,0 +1,9 @@
+threads: 4
+database:
+  binding: delayed
+  host: localhost
+  port: 5432
+  database: recorder
+  user: recorder
+  password: recorder
+query: "SELECT * FROM records WHERE rid = 1"

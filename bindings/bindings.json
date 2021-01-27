@@ -1,0 +1,10 @@
+{
+  "delayed": {
+    "include": "delayed.hpp",
+    "class": "recorder::DelayedDatabase"
+  },
+  "postgresql": {
+    "include": "postgresql.hpp",
+    "class": "recorder::PostgreSqlDatabase"
+  }
+}
